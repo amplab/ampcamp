@@ -32,6 +32,7 @@ import urllib2
 from optparse import OptionParser
 from sys import stderr
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
+from bs4 import BeautifulSoup
 
 
 # A static URL from which to figure out the latest Mesos EC2 AMI
@@ -346,6 +347,35 @@ def setup_mesos_cluster(master, opts):
   ssh(master, opts, "mesos-ec2/setup %s %s %s %s" %
       ("generic", "none", "master", opts.swap))
 
+def check_mesos_cluster(master_nodes, opts):
+  master = master_nodes[0].public_dns_name
+  url = "http://" + master + ":8080"
+  response = urllib2.urlopen(url)
+  if response.code != 200:
+    print "Mesos master " + url + " returned " + str(response.code)
+    return -1
+  master_html = urllib2.read()
+  return check_mesos_html(master_html, opts)
+
+def check_mesos_html(mesos_html, opts):
+  ## Find number of cpus from status page
+  html_soup = BeautifulSoup(mesos_html)
+  cpus_str = html_soup.find_all('td')[2].contents[0]
+  mesos_num_cpus = int(cpus_str.strip("CPUs"))
+
+  ## Find expected number of CPUs
+  num_cpus_per_slave = get_num_cpus(opts.instance_type)
+  expected_num_cpus = num_cpus_per_slave * opts.slaves
+  
+  print "Mesos master reports " + str(mesos_num_cpus) + " CPUs, expected " + str(expected_num_cpus)
+  
+  # TODO(shivaram): Should we check amount of memory as well ?
+
+  if int(mesos_num_cpus) == int(expected_num_cpus):
+    return 0
+  else: 
+    return -1
+
 def setup_standalone_cluster(master, slave_nodes, opts):
   slave_ips = '\n'.join([i.public_dns_name for i in slave_nodes])
   ssh(master, opts, "echo \"%s\" > spark/conf/slaves" % (slave_ips))
@@ -388,6 +418,29 @@ def get_num_disks(instance_type):
                       % instance_type)
     return 1
 
+# Get number of CPUs available for a given EC2 instance type.
+def get_num_cpus(instance_type):
+  # From http://aws.amazon.com/ec2/instance-types/
+  cpus_by_instance = {
+    "m1.small":    1,
+    "m1.large":    2,
+    "m1.xlarge":   4,
+    "t1.micro":    1,
+    "c1.medium":   2,
+    "c1.xlarge":   8,
+    "m2.xlarge":   2,
+    "m2.2xlarge":  4,
+    "m2.4xlarge":  8,
+    "cc1.4xlarge": 8,
+    "cc2.8xlarge": 16,
+    "cg1.4xlarge": 8
+  }
+  if instance_type in cpus_by_instance:
+    return cpus_by_instance[instance_type]
+  else:
+    print >> stderr, ("WARNING: Don't know number of cpus on instance type %s; assuming 2"
+                      % instance_type)
+    return 2
 
 # Deploy the configuration file templates in a given local directory to
 # a cluster, filling in any template parameters with information about the
@@ -471,6 +524,7 @@ def ssh(host, opts, command):
 def main():
   (opts, action, cluster_name) = parse_args()
   conn = boto.connect_ec2()
+  err = 0
 
   # Select an AZ at random if it was not specified.
   if opts.zone == "":
@@ -485,6 +539,7 @@ def main():
           conn, opts, cluster_name)
       wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes, zoo_nodes)
     setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, True)
+    err = check_cluster(master_nodes, opts)
 
   elif action == "destroy":
     response = raw_input("Are you sure you want to destroy the cluster " +
@@ -560,10 +615,14 @@ def main():
           inst.start()
     wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes, zoo_nodes)
     setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, False)
+    err = check_cluster(master_nodes, opts)
 
   else:
     print >> stderr, "Invalid action: %s" % action
     sys.exit(1)
+
+  if err != 0:
+    print >> stderr, "ERROR: mesos-check failed for spark_ec2"
 
 
 if __name__ == "__main__":

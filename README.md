@@ -1,4 +1,4 @@
 ampcamp
 =======
 
-scripts used for ampcamp
+scripts used for launching ampcamp EC2 cluster
