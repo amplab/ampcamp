@@ -419,8 +419,8 @@ def copy_ampcamp_data(master_nodes, opts):
   (s3_access_key, s3_secret_key) = get_s3_keys()
 
   # Escape '/' in S3-keys
-  s3_access_key = urllib2.quote(s3_access_key, ' ')
-  s3_secret_key = urllib2.quote(s3_secret_key, ' ')
+  s3_access_key = s3_access_key.replace('/', '%2F')
+  s3_secret_key = s3_secret_key.replace('/', '%2F')
 
   ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop distcp " +
                     "s3n://" + s3_access_key + ":" + s3_secret_key + "@" +
