@@ -19,7 +19,9 @@
 
 from __future__ import with_statement
 
+import base64
 import boto
+import hmac, sha
 import logging
 import os
 import random
@@ -36,10 +38,9 @@ from bs4 import BeautifulSoup
 
 
 # A static URL from which to figure out the latest Mesos EC2 AMI
-LATEST_AMI_URL = "https://s3.amazonaws.com/mesos-images/ids/latest-spark-0.5"
-#LATEST_AMI_URL = "https://s3.amazonaws.com/ampcamp-amis/latest-ampcamp"
+# LATEST_AMI_URL = "https://s3.amazonaws.com/mesos-images/ids/latest-spark-0.5"
+LATEST_AMI_URL = "http://s3.amazonaws.com/ampcamp-amis/latest-ampcamp"
 LATEST_STANDALONE_AMI_URL = "https://s3.amazonaws.com/spark-standalone-amis/latest-spark"
-
 
 # Configure and parse our command-line arguments
 def parse_args():
@@ -48,16 +49,16 @@ def parse_args():
       add_help_option=False)
   parser.add_option("-h", "--help", action="help",
                     help="Show this help message and exit")
-  parser.add_option("-s", "--slaves", type="int", default=1,
-      help="Number of slaves to launch (default: 1)")
+  parser.add_option("-s", "--slaves", type="int", default=3,
+      help="Number of slaves to launch (default: 3)")
   parser.add_option("-w", "--wait", type="int", default=120,
       help="Seconds to wait for nodes to start (default: 120)")
   parser.add_option("-k", "--key-pair",
       help="Key pair to use on instances")
   parser.add_option("-i", "--identity-file", 
       help="SSH private key file to use for logging into instances")
-  parser.add_option("-t", "--instance-type", default="m1.large",
-      help="Type of instance to launch (default: m1.large). " +
+  parser.add_option("-t", "--instance-type", default="m2.xlarge",
+      help="Type of instance to launch (default: m2.xlarge). " +
            "WARNING: must be 64-bit; small instances won't work")
   parser.add_option("-m", "--master-instance-type", default="",
       help="Master instance type (leave empty for same as instance-type)")
@@ -145,6 +146,30 @@ def is_active(instance):
   return (instance.state in ['pending', 'running', 'stopping', 'stopped'])
 
 
+def get_ami(ami_given): 
+  # Figure out the latest AMI from our static URL
+  if ami_given == "latest":
+    # TODO: Delete all these lines and uncomment the last line once our AMI is public
+    expires = int(time.time()) + 1500
+    canonicalized_resource = urllib2.quote("/ampcamp-amis/latest-ampcamp")
+    string_to_sign = "GET\n\n\n" + str(expires) + "\n" + canonicalized_resource
+    (s3_access_key, s3_secret_key) = get_s3_keys()
+    signature = base64.b64encode(hmac.new(s3_secret_key, string_to_sign, sha).digest())
+    url = LATEST_AMI_URL + "?AWSAccessKeyId=" + urllib2.quote(s3_access_key, ' ') +\
+          "&Expires=" + str(expires) + "&Signature=" + urllib2.quote(signature, ' ')
+    # url = LATEST_AMI_URL
+  elif ami_given == "standalone":
+    url = LATEST_STANDALONE_AMI_URL
+  else:
+    print >> stderr, "Invalid ami " + ami_given
+  
+  try:
+    ami = urllib2.urlopen(url).read().strip()
+    print "Using Spark AMI: " + ami
+    return ami
+  except:
+    print >> stderr, "Could not read " + url
+
 # Launch a cluster of the given name, by setting up its security groups,
 # and then starting new instances in them.
 # Returns a tuple of EC2 reservation objects for the master, slave
@@ -199,18 +224,7 @@ def launch_cluster(conn, opts, cluster_name):
           sys.exit(1)
 
   if opts.ami in ["latest", "standalone"]:
-    
-    # Figure out the latest AMI from our static URL
-    if opts.ami == "latest":
-      url = LATEST_AMI_URL
-    elif opts.ami == "standalone":
-      url = LATEST_STANDALONE_AMI_URL
-
-    try:
-      opts.ami = urllib2.urlopen(url).read().strip()
-      print "Latest Spark AMI: " + opts.ami
-    except:
-      print >> stderr, "Could not read " + url
+    opts.ami = get_ami(opts.ami)
 
   print "Launching instances..."
 
@@ -403,6 +417,10 @@ def copy_ampcamp_data(master_nodes, opts):
   ssh(master, opts, "/root/ephemeral-hdfs/bin/start-mapred.sh")
 
   (s3_access_key, s3_secret_key) = get_s3_keys()
+
+  # Escape '/' in S3-keys
+  s3_access_key = urllib2.quote(s3_access_key, ' ')
+  s3_secret_key = urllib2.quote(s3_secret_key, ' ')
 
   ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop distcp " +
                     "s3n://" + s3_access_key + ":" + s3_secret_key + "@" +
