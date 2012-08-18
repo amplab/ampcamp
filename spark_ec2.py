@@ -112,16 +112,6 @@ def parse_args():
     print >> stderr, ("ERROR: The environment variable AWS_SECRET_ACCESS_KEY " +
                       "must be set")
     sys.exit(1)
-  if opts.copy:
-    if os.getenv('S3_AWS_ACCESS_KEY_ID') == None:
-      print >> stderr, ("ERROR: The environment variable S3_AWS_ACCESS_KEY_ID " +
-                        "must be set")
-      sys.exit(1)
-    if os.getenv('S3_AWS_SECRET_ACCESS_KEY') == None:
-      print >> stderr, ("ERROR: The environment variable S3_AWS_SECRET_ACCESS_KEY " +
-                        "must be set")
-      sys.exit(1)
-
   return (opts, action, cluster_name)
 
 
@@ -412,15 +402,23 @@ def copy_ampcamp_data(master_nodes, opts):
   master = master_nodes[0].public_dns_name
   ssh(master, opts, "/root/ephemeral-hdfs/bin/start-mapred.sh")
 
-  s3_access_key = os.getenv("S3_AWS_ACCESS_KEY_ID")
-  s3_secret_key = os.getenv("S3_AWS_SECRET_ACCESS_KEY")
+  (s3_access_key, s3_secret_key) = get_s3_keys()
 
   ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop distcp " +
                     "s3n://" + s3_access_key + ":" + s3_secret_key + "@" +
                     "ak-ampcamp/wikistats_20090505-07 " +
                     "hdfs://`hostname`:9000/wiki/pagecounts")
 
-
+def get_s3_keys():
+  if os.getenv('S3_AWS_ACCESS_KEY_ID') != None:
+    s3_access_key = os.getenv("S3_AWS_ACCESS_KEY_ID")
+  else:
+    s3_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+  if os.getenv('S3_AWS_SECRET_ACCESS_KEY') != None:
+    s3_secret_key = os.getenv("S3_AWS_SECRET_ACCESS_KEY")
+  else:
+    s3_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+  return (s3_access_key, s3_secret_key)
 
 def setup_standalone_cluster(master, slave_nodes, opts):
   slave_ips = '\n'.join([i.public_dns_name for i in slave_nodes])
