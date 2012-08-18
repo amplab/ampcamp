@@ -34,7 +34,7 @@ import urllib2
 from optparse import OptionParser
 from sys import stderr
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
-from bs4 import BeautifulSoup
+from BeautifulSoup import *
 
 
 # A static URL from which to figure out the latest Mesos EC2 AMI
@@ -396,7 +396,7 @@ def check_mesos_cluster(master_nodes, opts):
 def check_mesos_html(mesos_html, opts):
   ## Find number of cpus from status page
   html_soup = BeautifulSoup(mesos_html)
-  cpus_str = html_soup.find_all('td')[2].contents[0]
+  cpus_str = html_soup.findAll('td')[2].contents[0]
   mesos_num_cpus = int(cpus_str.strip("CPUs"))
 
   ## Find expected number of CPUs
