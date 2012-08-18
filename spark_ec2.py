@@ -37,6 +37,7 @@ from bs4 import BeautifulSoup
 
 # A static URL from which to figure out the latest Mesos EC2 AMI
 LATEST_AMI_URL = "https://s3.amazonaws.com/mesos-images/ids/latest-spark-0.5"
+#LATEST_AMI_URL = "https://s3.amazonaws.com/ampcamp-amis/latest-ampcamp"
 LATEST_STANDALONE_AMI_URL = "https://s3.amazonaws.com/spark-standalone-amis/latest-spark"
 
 
@@ -85,6 +86,11 @@ def parse_args():
       help="'mesos' for a mesos cluster, 'standalone' for a standalone spark cluster (default: mesos)")
   parser.add_option("-u", "--user", default="root",
       help="The ssh user you want to connect as (default: root)")
+  parser.add_option("--copy", action="store_true", default=False,
+      help="Copy AMP Camp data from S3 to ephemeral HDFS after launching the cluster (default: false)")
+
+  parser.add_option("--s3-bucket", default="ak-ampcamp/wikistats_20090505-07",
+      help="S3 bucket to copy ampcamp data from (default: ak-ampcamp/wikistats_20090505-07)")
             
   (opts, args) = parser.parse_args()
   if len(args) != 2:
@@ -106,6 +112,16 @@ def parse_args():
     print >> stderr, ("ERROR: The environment variable AWS_SECRET_ACCESS_KEY " +
                       "must be set")
     sys.exit(1)
+  if opts.copy:
+    if os.getenv('S3_AWS_ACCESS_KEY_ID') == None:
+      print >> stderr, ("ERROR: The environment variable S3_AWS_ACCESS_KEY_ID " +
+                        "must be set")
+      sys.exit(1)
+    if os.getenv('S3_AWS_SECRET_ACCESS_KEY') == None:
+      print >> stderr, ("ERROR: The environment variable S3_AWS_SECRET_ACCESS_KEY " +
+                        "must be set")
+      sys.exit(1)
+
   return (opts, action, cluster_name)
 
 
@@ -146,9 +162,10 @@ def is_active(instance):
 # Fails if there already instances running in the cluster's groups.
 def launch_cluster(conn, opts, cluster_name):
   print "Setting up security groups..."
-  master_group = get_or_make_group(conn, cluster_name + "-master")
-  slave_group = get_or_make_group(conn, cluster_name + "-slaves")
-  zoo_group = get_or_make_group(conn, cluster_name + "-zoo")
+  
+  master_group = get_or_make_group(conn, "master")
+  slave_group = get_or_make_group(conn, "slaves")
+  zoo_group = get_or_make_group(conn, "zoo")
   if master_group.rules == []: # Group was just now created
     master_group.authorize(src_group=master_group)
     master_group.authorize(src_group=slave_group)
@@ -184,13 +201,12 @@ def launch_cluster(conn, opts, cluster_name):
   print "Checking for running cluster..."
   reservations = conn.get_all_instances()
   for res in reservations:
-    group_names = [g.id for g in res.groups]
-    if master_group.name in group_names or slave_group.name in group_names or zoo_group.name in group_names:
-      active = [i for i in res.instances if is_active(i)]
-      if len(active) > 0:
-        print >> stderr, ("ERROR: There are already instances running in " +
-            "group %s, %s or %s" % (master_group.name, slave_group.name, zoo_group.name))
-        sys.exit(1)
+    for instance in res.instances:
+      if 'tags' in instance.__dict__ and 'cluster' in instance.tags:
+        if instance.tags['cluster'] == cluster_name:
+          print >> stderr, ("ERROR: Instances %s is already running in cluster %s"
+                            % (instance.id, cluster_name))
+          sys.exit(1)
 
   if opts.ami in ["latest", "standalone"]:
     
@@ -286,6 +302,18 @@ def launch_cluster(conn, opts, cluster_name):
   master_nodes = master_res.instances
   print "Launched master, regid = " + master_res.id
 
+  # Create the right tags
+  tags = {}
+  tags['cluster'] = cluster_name
+
+  tags['type'] = 'slave'
+  for node in slave_nodes:
+    conn.create_tags([node.id], tags)
+  
+  tags['type'] = 'master'
+  for node in master_nodes:
+    conn.create_tags([node.id], tags)
+
   zoo_nodes = []
 
   # Return all the instances
@@ -304,22 +332,26 @@ def get_existing_cluster(conn, opts, cluster_name):
   for res in reservations:
     active = [i for i in res.instances if is_active(i)]
     if len(active) > 0:
-      group_names = [g.name for g in res.groups]
-      if group_names == [cluster_name + "-master"]:
-        master_nodes += res.instances
-      elif group_names == [cluster_name + "-slaves"]:
-        slave_nodes += res.instances
-      elif group_names == [cluster_name + "-zoo"]:
-        zoo_nodes += res.instances
+      for instance in res.instances:
+        if 'tags' in instance.__dict__ and 'cluster' in instance.tags \
+          and 'type' in instance.tags:
+            if instance.tags['cluster'] == cluster_name:
+              if instance.tags['type'] == 'master':
+                master_nodes.append(instance)
+              elif instance.tags['type'] == 'slave':
+                slave_nodes.append(instance)
+              elif instance.tags['type'] == 'zoo':
+                zoo_nodes.append(instance)
+
   if master_nodes != [] and slave_nodes != []:
     print ("Found %d master(s), %d slaves, %d ZooKeeper nodes" %
            (len(master_nodes), len(slave_nodes), len(zoo_nodes)))
     return (master_nodes, slave_nodes, zoo_nodes)
   else:
     if master_nodes == [] and slave_nodes != []:
-      print "ERROR: Could not find master in group " + cluster_name + "-master"
+      print "ERROR: Could not find master in cluster " + cluster_name
     elif master_nodes != [] and slave_nodes == []:
-      print "ERROR: Could not find slaves in group " + cluster_name + "-slaves"
+      print "ERROR: Could not find slaves in cluster " + cluster_name
     else:
       print "ERROR: Could not find any existing cluster"
     sys.exit(1)
@@ -354,7 +386,7 @@ def check_mesos_cluster(master_nodes, opts):
   if response.code != 200:
     print "Mesos master " + url + " returned " + str(response.code)
     return -1
-  master_html = urllib2.read()
+  master_html = response.read()
   return check_mesos_html(master_html, opts)
 
 def check_mesos_html(mesos_html, opts):
@@ -375,6 +407,20 @@ def check_mesos_html(mesos_html, opts):
     return 0
   else: 
     return -1
+
+def copy_ampcamp_data(master_nodes, opts):
+  master = master_nodes[0].public_dns_name
+  ssh(master, opts, "/root/ephemeral-hdfs/bin/start-mapred.sh")
+
+  s3_access_key = os.getenv("S3_AWS_ACCESS_KEY_ID")
+  s3_secret_key = os.getenv("S3_AWS_SECRET_ACCESS_KEY")
+
+  ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop distcp " +
+                    "s3n://" + s3_access_key + ":" + s3_secret_key + "@" +
+                    "ak-ampcamp/wikistats_20090505-07 " +
+                    "hdfs://`hostname`:9000/wiki/pagecounts")
+
+
 
 def setup_standalone_cluster(master, slave_nodes, opts):
   slave_ips = '\n'.join([i.public_dns_name for i in slave_nodes])
@@ -539,7 +585,12 @@ def main():
           conn, opts, cluster_name)
       wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes, zoo_nodes)
     setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, True)
-    err = check_cluster(master_nodes, opts)
+    err = check_mesos_cluster(master_nodes, opts)
+    if err != 0:
+      print >> stderr, "ERROR: mesos-check failed for spark_ec2"
+      sys.exit(1)
+    if opts.copy:
+      copy_ampcamp_data(master_nodes, opts)
 
   elif action == "destroy":
     response = raw_input("Are you sure you want to destroy the cluster " +
@@ -615,14 +666,17 @@ def main():
           inst.start()
     wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes, zoo_nodes)
     setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, False)
-    err = check_cluster(master_nodes, opts)
+    err = check_mesos_cluster(master_nodes, opts)
+    if err != 0:
+      print >> stderr, "ERROR: mesos-check failed for spark_ec2"
+      sys.exit(1)
+    if opts.copy:
+      copy_ampcamp_data(master_nodes, opts)
+
 
   else:
     print >> stderr, "Invalid action: %s" % action
     sys.exit(1)
-
-  if err != 0:
-    print >> stderr, "ERROR: mesos-check failed for spark_ec2"
 
 
 if __name__ == "__main__":
