@@ -90,8 +90,11 @@ def parse_args():
   parser.add_option("--copy", action="store_true", default=False,
       help="Copy AMP Camp data from S3 to ephemeral HDFS after launching the cluster (default: false)")
 
-  parser.add_option("--s3-bucket", default="ak-ampcamp/wikistats_20090505-07",
-      help="S3 bucket to copy ampcamp data from (default: ak-ampcamp/wikistats_20090505-07)")
+  parser.add_option("--s3-stats-bucket", default="ak-ampcamp/wikistats_20090505-07",
+      help="S3 bucket to copy ampcamp data  from (default: ak-ampcamp/wikistats_20090505-07)")
+
+  parser.add_option("--s3-small-bucket", default="ak-ampcamp/wikistats_20090505-07_restricted",
+      help="S3 bucket to copy ampcamp restricted data from (default: ak-ampcamp/wikistats_20090505-07_restricted)")
             
   (opts, args) = parser.parse_args()
   if len(args) != 2:
@@ -424,8 +427,14 @@ def copy_ampcamp_data(master_nodes, opts):
 
   ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop distcp " +
                     "s3n://" + s3_access_key + ":" + s3_secret_key + "@" +
-                    "ak-ampcamp/wikistats_20090505-07 " +
+                    opts.s3_stats_bucket + " " +
                     "hdfs://`hostname`:9000/wiki/pagecounts")
+
+  ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop distcp " +
+                    "s3n://" + s3_access_key + ":" + s3_secret_key + "@" +
+                    opts.s3_small_bucket + " " +
+                    "hdfs://`hostname`:9000/wikistats_20090505-07_restricted")
+
 
 def get_s3_keys():
   if os.getenv('S3_AWS_ACCESS_KEY_ID') != None:
@@ -689,7 +698,7 @@ def main():
       sys.exit(1)
     if opts.copy:
       copy_ampcamp_data(master_nodes, opts)
-    print "Cluster successfully launched! You can login to the master at " + master_nodes[0].public_dns_name
+    print >>stderr, ("SUCCESS: Cluster successfully launched! You can login to the master at " + master_nodes[0].public_dns_name)
 
 
   else:
