@@ -57,7 +57,7 @@ def main():
   subprocesses = []
   cluster_names = []
 
-  for cluster in range(opts.start_clusters, opts.start_clusters + opts.clusters+1):
+  for cluster in range(opts.start_clusters, opts.start_clusters + opts.clusters):
     # Launch a cluster
     args = []
     args.append(spark_script_path) 
@@ -66,6 +66,8 @@ def main():
     args.append(opts.key_pair)
     args.append('-i')
     args.append(opts.identity_file)
+    args.append('-s')
+    args.append(str(opts.slaves))
     
     args.append('-z')
     args.append(availability_zones[cluster % len(availability_zones)])
@@ -113,7 +115,7 @@ def wait_and_check(subprocesses, cluster_names):
         num_success = num_success + 1
         parts = err.split() 
         master_name = parts[len(parts) - 1]
-        print >> stderr, ("INFO: Cluster " + cluster_names[p] + " " + master_name)
+        print >> stderr, ("INFO: Cluster " + cluster_names[p] + " " + master_name + "\n")
         break
       elif "ERROR: mesos-check" in err:
         num_mesos_failed = num_mesos_failed + 1
