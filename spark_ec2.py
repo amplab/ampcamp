@@ -616,7 +616,7 @@ def main():
       sys.exit(1)
     if opts.copy:
       copy_ampcamp_data(master_nodes, opts)
-    print "Cluster successfully launched! You can login to the master at " + master_nodes[0].public_dns_name
+    print >>stderr, ("SUCCESS: Cluster successfully launched! You can login to the master at " + master_nodes[0].public_dns_name)
 
   elif action == "destroy":
     response = raw_input("Are you sure you want to destroy the cluster " +
