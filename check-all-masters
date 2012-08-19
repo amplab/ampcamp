@@ -1,0 +1,4 @@
+#!/bin/bash 
+# Script which parses list of master-nodes running on EC2 and checks the mesos-master status for each of them
+
+PYTHONPATH="./third_party/boto-2.4.1.zip/boto-2.4.1:./third_party/beautifulsoup3-3.2.1.zip/BeautifulSoup-3.2.1:$PYTHONPATH" python check_all_masters.py

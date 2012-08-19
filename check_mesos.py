@@ -8,7 +8,7 @@ from optparse import OptionParser
 from sys import stderr
 
 def parse_args():
-  parser = OptionParser(usage="check_mesos <master_hostname>",
+  parser = OptionParser(usage="check_mesos <mesos_master_url>",
       add_help_option=True)
   (opts, args) = parser.parse_args()
   if len(args) != 1:
@@ -18,7 +18,9 @@ def parse_args():
 
 def main():
   master = parse_args()
-  url = master
+  check_mesos_url(master)
+
+def check_mesos_url(url):
   #url = "http://" + master + ":8080"
   response = urllib2.urlopen(url)
   if response.code != 200:
