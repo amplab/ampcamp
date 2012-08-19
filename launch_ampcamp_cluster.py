@@ -9,8 +9,11 @@ from optparse import OptionParser
 from sys import stderr
 
 def parse_args():
-  parser = OptionParser(usage="launch_ampcamp_cluster [options] <path_to_spark_ec2.py>",
+  parser = OptionParser(usage="launch_ampcamp_cluster [options] <path_to spark-ec2>",
       add_help_option=True)
+
+  parser.add_option("--start-clusters", type="int", default=1,
+      help="Start index from which cluster names are generated (useful for debugging)")
   parser.add_option("-n", "--clusters", type="int", default=1,
       help="Number of clusters to launch (default: 1)")
   parser.add_option("-b", "--buckets", type="int", default=1,
@@ -20,13 +23,13 @@ def parse_args():
            " will be appended at the end to form the complete s3 key " +
            " (default: ampcamp-data/wikistats_20090505-0)")
 
-  parser.add_option("--s3-small-bucket", default="ampcamp-data/wikistats_20090505-0",
-      help="base-name of S3 bucket to copy ampcamp data from. The bucket number " +
+  parser.add_option("--s3-small-bucket", default="ampcamp-data/wikistats_20090505_restricted-0",
+      help="base-name of S3 bucket to copy restricted ampcamp data from. The bucket number " +
            " will be appended at the end to form the complete s3 key " +
-           " (default: ampcamp-data/wikistats_20090505-0)")
+           " (default: ampcamp-data/wikistats_20090505_restricted-0)")
 
-  # parser.add_option("-p", "--parallel", type="int", default=1,
-  #     help="Number of launches that will happen in parallel (default: 1)")
+  parser.add_option("-p", "--parallel", type="int", default=1,
+      help="Number of launches that will happen in parallel (default: 1)")
 
   # spark-ec2 options that are just passed through
   parser.add_option("-s", "--slaves", type="int", default=3,
@@ -50,10 +53,11 @@ def parse_args():
 def main():
   (opts, spark_script_path) = parse_args()
   s3_buckets = range(1, opts.buckets + 1)
-  availability_zones = ["us-east-1b", "us-east-1c", "us-east-1d", "us-east-1a"]
+  availability_zones = ["us-east-1b", "us-east-1d", "us-east-1a"]
   subprocesses = []
+  cluster_names = []
 
-  for cluster in range(1, opts.clusters+1):
+  for cluster in range(opts.start_clusters, opts.start_clusters + opts.clusters+1):
     # Launch a cluster
     args = []
     args.append(spark_script_path) 
@@ -77,37 +81,49 @@ def main():
     args.append(cluster_name)
 
     print "Launching " + cluster_name
-    proc = subprocesses.Popen(args, stdout=open("/tmp/" + cluster_name + ".out", "w"),
-                              stderr=open("/tmp/" + cluster_name + ".err", "w"))
+    proc = subprocess.Popen(args, stdout=open("/tmp/" + cluster_name + ".out", "w"),
+                            stderr=open("/tmp/" + cluster_name + ".err", "w"))
     subprocesses.append(proc)
     cluster_names.append(cluster_name)
  
     # Wait for all the parallel launches to finish
     if (len(subprocesses) == opts.parallel):
-      num_success = 0
-      num_mesos_failed = 0
-      print "Waiting for parallel launches to finish...."
-      # Print out details about clusters we launched 
-      for p in range(0, len(subprocesses)): 
-        subprocesses[p].wait()
-        p_stderr = open("/tmp/" + cluster_names[p] + ".err")
-        p_stdout = open("/tmp/" + cluster_names[p] + ".out")
-        errs = p_stderr.readlines()
-        for err in errs:
-          if err.contains("SUCCESS:"):
-            num_success = num_success + 1
-            parts = err.split() 
-            master_name = parts[len(parts) - 1]
-            print >> stderr, ("INFO: Cluster " + cluster_names[p] + " " + master_name)
-            break
-          elif err.contains("ERROR: mesos-check"):
-            num_mesos_failed = num_mesos_failed + 1
-            break
+      ret = wait_and_check(subprocesses, cluster_names)
+      subprocesses = []
+      cluster_names = []
+      if ret != 0:
+        print >> stderr, ("ERROR: Wait and check failed. Exiting")
+        sys.exit(-1)
 
-      if (num_success != len(subprocesses)):
-        print("ERROR: Failed to launch all clusters " + num_mesos_failed + " failed mesos check")
-      del subprocesses[:]
-      del cluster_names[:]
+  if (len(subprocesses) != 0):
+    wait_and_check(subprocesses, cluster_names)
+
+def wait_and_check(subprocesses, cluster_names):
+  num_success = 0
+  num_mesos_failed = 0
+  print "Waiting for parallel launches to finish...."
+  # Print out details about clusters we launched 
+  for p in range(0, len(subprocesses)): 
+    subprocesses[p].wait()
+    p_stderr = open("/tmp/" + cluster_names[p] + ".err")
+    p_stdout = open("/tmp/" + cluster_names[p] + ".out")
+    errs = p_stderr.readlines()
+    for err in errs:
+      if "SUCCESS:" in err:
+        num_success = num_success + 1
+        parts = err.split() 
+        master_name = parts[len(parts) - 1]
+        print >> stderr, ("INFO: Cluster " + cluster_names[p] + " " + master_name)
+        break
+      elif "ERROR: mesos-check" in err:
+        num_mesos_failed = num_mesos_failed + 1
+        break
+  
+  if (num_success != len(subprocesses)):
+    print("ERROR: Failed to launch all clusters " + str(num_mesos_failed) + " failed mesos check")
+    return -1
+  else:
+    return 0
 
 if __name__ == "__main__":
   logging.basicConfig()
