@@ -417,6 +417,7 @@ def check_mesos_html(mesos_html, opts):
 
 def copy_ampcamp_data(master_nodes, opts):
   master = master_nodes[0].public_dns_name
+  ssh(master, opts, "/root/ephemeral-hdfs/bin/stop-mapred.sh")
   ssh(master, opts, "/root/ephemeral-hdfs/bin/start-mapred.sh")
 
   (s3_access_key, s3_secret_key) = get_s3_keys()
