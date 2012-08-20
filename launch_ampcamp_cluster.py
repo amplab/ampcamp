@@ -90,7 +90,7 @@ def main():
 
     print "Launching " + cluster_name
     proc = subprocess.Popen(args, stdout=open("/tmp/" + cluster_name + ".out", "w"),
-                            stderr=open("/tmp/" + cluster_name + ".err", "w"))
+                            stderr=open("/tmp/" + cluster_name + ".err", "w"), shell=True)
     subprocesses.append(proc)
     cluster_names.append(cluster_name)
  
