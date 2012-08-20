@@ -596,6 +596,12 @@ def ssh(host, opts, command):
       "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
       (opts.identity_file, opts.user, host, command), shell=True)
 
+def wait_for_mesos_cluster():
+  err = check_mesos_cluster(master_nodes, opts)
+  count = 0
+  while err != 0 and count < 10:
+    time.sleep(5)
+  return err
 
 def main():
   (opts, action, cluster_name) = parse_args()
@@ -615,7 +621,8 @@ def main():
           conn, opts, cluster_name)
       wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes, zoo_nodes)
     setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, True)
-    err = check_mesos_cluster(master_nodes, opts)
+    print "Waiting for mesos cluster to start..."
+    err = wait_for_mesos_cluster()
     if err != 0:
       print >> stderr, "ERROR: mesos-check failed for spark_ec2"
       sys.exit(1)
@@ -702,7 +709,8 @@ def main():
           inst.start()
     wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes, zoo_nodes)
     setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, False)
-    err = check_mesos_cluster(master_nodes, opts)
+    print "Waiting for mesos cluster to start..."
+    err = wait_for_mesos_cluster()
     if err != 0:
       print >> stderr, "ERROR: mesos-check failed for spark_ec2"
       sys.exit(1)
