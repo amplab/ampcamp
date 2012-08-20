@@ -389,12 +389,16 @@ def setup_mesos_cluster(master, opts):
 def check_mesos_cluster(master_nodes, opts):
   master = master_nodes[0].public_dns_name
   url = "http://" + master + ":8080"
-  response = urllib2.urlopen(url)
-  if response.code != 200:
-    print "Mesos master " + url + " returned " + str(response.code)
+  try:
+    response = urllib2.urlopen(url)
+    if response.code != 200:
+      print "Mesos master " + url + " returned " + str(response.code)
+      return -1
+    master_html = response.read()
+    return check_mesos_html(master_html, opts)
+  except:
+    # If we get an exception, return error
     return -1
-  master_html = response.read()
-  return check_mesos_html(master_html, opts)
 
 def check_mesos_html(mesos_html, opts):
   ## Find number of cpus from status page

@@ -115,7 +115,7 @@ def wait_and_check(subprocesses, cluster_names):
         num_success = num_success + 1
         parts = err.split() 
         master_name = parts[len(parts) - 1]
-        print >> stderr, ("INFO: Cluster " + cluster_names[p] + " " + master_name + "\n")
+        print >> stderr, ("INFO: Cluster " + cluster_names[p] + " " + master_name.strip() + "\n")
         break
       elif "ERROR: mesos-check" in err:
         num_mesos_failed = num_mesos_failed + 1
