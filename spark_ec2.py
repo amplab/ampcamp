@@ -421,14 +421,27 @@ def check_mesos_html(mesos_html, opts):
 
 def copy_ampcamp_data(master_nodes, opts):
   master = master_nodes[0].public_dns_name
-  ssh(master, opts, "/root/ephemeral-hdfs/bin/stop-mapred.sh")
-  ssh(master, opts, "/root/ephemeral-hdfs/bin/start-mapred.sh")
 
+  ssh(master, opts, "/root/ephemeral-hdfs/bin/stop-mapred.sh")
+  # Wait for mapred to stop
+  time.sleep(10)
+
+  ssh(master, opts, "/root/ephemeral-hdfs/bin/start-mapred.sh")
+  # Wait for mapred to start
+  time.sleep(10)
+  
   (s3_access_key, s3_secret_key) = get_s3_keys()
 
   # Escape '/' in S3-keys
-  s3_access_key = s3_access_key.replace('/', '%2F')
-  s3_secret_key = s3_secret_key.replace('/', '%2F')
+  # NOTE: This doesn't work as the code path from DistCp assumes path
+  # strings are unescaped, but looks for '/' to separate URI components.
+  #
+  # If the access key has a slash it is best to put it in core-site.xml
+  # and re-run copy-data
+  # All other reserved characters work without being escaped
+  #
+  # s3_access_key = s3_access_key.replace('/', '%2F')
+  # s3_secret_key = s3_secret_key.replace('/', '%2F')
 
   ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop distcp " +
                     "s3n://" + s3_access_key + ":" + s3_secret_key + "@" +
@@ -596,11 +609,12 @@ def ssh(host, opts, command):
       "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
       (opts.identity_file, opts.user, host, command), shell=True)
 
-def wait_for_mesos_cluster():
+def wait_for_mesos_cluster(master_nodes, opts):
   err = check_mesos_cluster(master_nodes, opts)
   count = 0
   while err != 0 and count < 10:
     time.sleep(5)
+    count = count + 1
   return err
 
 def main():
@@ -622,7 +636,7 @@ def main():
       wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes, zoo_nodes)
     setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, True)
     print "Waiting for mesos cluster to start..."
-    err = wait_for_mesos_cluster()
+    err = wait_for_mesos_cluster(master_nodes, opts)
     if err != 0:
       print >> stderr, "ERROR: mesos-check failed for spark_ec2"
       sys.exit(1)
@@ -665,6 +679,11 @@ def main():
 
   elif action == "copy-data":
     (master_nodes, slave_nodes, zoo_nodes) = get_existing_cluster(conn, opts, cluster_name)
+    print "Waiting for mesos cluster to start..."
+    err = wait_for_mesos_cluster(master_nodes, opts)
+    if err != 0:
+      print >> stderr, "ERROR: mesos-check failed for spark_ec2"
+      sys.exit(1)
     copy_ampcamp_data(master_nodes, opts)
     print >>stderr, ("SUCCESS: Data copied successfully! You can login to the master at " + master_nodes[0].public_dns_name)
 
@@ -710,7 +729,7 @@ def main():
     wait_for_cluster(conn, opts.wait, master_nodes, slave_nodes, zoo_nodes)
     setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, False)
     print "Waiting for mesos cluster to start..."
-    err = wait_for_mesos_cluster()
+    err = wait_for_mesos_cluster(master_nodes, opts)
     if err != 0:
       print >> stderr, "ERROR: mesos-check failed for spark_ec2"
       sys.exit(1)
