@@ -16,7 +16,10 @@ def main():
   for (name, host) in name_host:
     print name + " " + host
     master_url = "http://" + host + ":8080"
-    check_mesos_url(master_url)
+    try:
+      check_mesos_url(master_url)
+    except Exception:
+      print "Mesos master DOWN"
 
 if __name__ == "__main__":
   main()
