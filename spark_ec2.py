@@ -45,7 +45,7 @@ LATEST_STANDALONE_AMI_URL = "https://s3.amazonaws.com/spark-standalone-amis/late
 # Configure and parse our command-line arguments
 def parse_args():
   parser = OptionParser(usage="spark-ec2 [options] <action> <cluster_name>"
-      + "\n\n<action> can be: launch, destroy, login, stop, start, get-master",
+      + "\n\n<action> can be: launch, destroy, login, stop, start, get-master, copy-data",
       add_help_option=False)
   parser.add_option("-h", "--help", action="help",
                     help="Show this help message and exit")
@@ -655,6 +655,11 @@ def main():
   elif action == "get-master":
     (master_nodes, slave_nodes, zoo_nodes) = get_existing_cluster(conn, opts, cluster_name)
     print master_nodes[0].public_dns_name
+
+  elif action == "copy-data":
+    (master_nodes, slave_nodes, zoo_nodes) = get_existing_cluster(conn, opts, cluster_name)
+    copy_ampcamp_data(master_nodes, opts)
+    print >>stderr, ("SUCCESS: Data copied successfully! You can login to the master at " + master_nodes[0].public_dns_name)
 
   elif action == "stop":
     response = raw_input("Are you sure you want to stop the cluster " +
