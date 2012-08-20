@@ -43,6 +43,11 @@ def parse_args():
            "availabe mesos AMI, 'standalone' for the latest available " +
            "standalone AMI (default: latest)")
 
+  parser.add_option("--action", default="launch",
+      help="Action to used while calling spark-ec2 (default: launch)") 
+  parser.add_option("--copy", action="store_true", default=False,
+      help="Copy AMP Camp data from S3 to ephemeral HDFS after launching the cluster (default: false)")
+
   (opts, args) = parser.parse_args()
   if len(args) != 1:
     parser.print_help()
@@ -77,8 +82,9 @@ def main():
     args.append('--s3-small-bucket')
     args.append(opts.s3_small_bucket + str(s3_buckets[cluster%len(s3_buckets)]))
     
-    args.append('--copy')
-    args.append('launch')
+    if opts.copy:
+      args.append('--copy')
+    args.append(opts.action)
     cluster_name = 'ampcamp' + str(cluster)
     args.append(cluster_name)
 
@@ -115,14 +121,15 @@ def wait_and_check(subprocesses, cluster_names):
         num_success = num_success + 1
         parts = err.split() 
         master_name = parts[len(parts) - 1]
-        print >> stderr, ("INFO: Cluster " + cluster_names[p] + " " + master_name.strip() + "\n")
+        master_name = master_name.replace('\r', '' )
+        print "INFO: Cluster " + cluster_names[p] + " " + master_name.strip() + "\n"
         break
       elif "ERROR: mesos-check" in err:
         num_mesos_failed = num_mesos_failed + 1
         break
   
   if (num_success != len(subprocesses)):
-    print("ERROR: Failed to launch all clusters " + str(num_mesos_failed) + " failed mesos check")
+    print "ERROR: Failed to launch all clusters " + str(num_mesos_failed) + " failed mesos check"
     return -1
   else:
     return 0
