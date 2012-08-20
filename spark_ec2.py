@@ -181,9 +181,9 @@ def get_ami(ami_given):
 def launch_cluster(conn, opts, cluster_name):
   print "Setting up security groups..."
   
-  master_group = get_or_make_group(conn, "master")
-  slave_group = get_or_make_group(conn, "slaves")
-  zoo_group = get_or_make_group(conn, "zoo")
+  master_group = get_or_make_group(conn, "ampcamp-master")
+  slave_group = get_or_make_group(conn, "ampcamp-slaves")
+  zoo_group = get_or_make_group(conn, "ampcamp-zoo")
   if master_group.rules == []: # Group was just now created
     master_group.authorize(src_group=master_group)
     master_group.authorize(src_group=slave_group)
@@ -221,7 +221,7 @@ def launch_cluster(conn, opts, cluster_name):
   for res in reservations:
     for instance in res.instances:
       if 'tags' in instance.__dict__ and 'cluster' in instance.tags:
-        if instance.tags['cluster'] == cluster_name:
+        if instance.tags['cluster'] == cluster_name and is_active(instance):
           print >> stderr, ("ERROR: Instances %s is already running in cluster %s"
                             % (instance.id, cluster_name))
           sys.exit(1)
