@@ -460,8 +460,8 @@ def copy_ampcamp_data(master_nodes, opts):
 def set_s3_keys_in_hdfs(master, opts, s3_access_key, s3_secret_key):
   ssh(master, opts, "cd ephemeral-hdfs/conf; sed -i \"s/\!-- p/p/g\" core-site.xml")
   ssh(master, opts, "cd ephemeral-hdfs/conf; sed -i \"s/y --/y/g\" core-site.xml")
-  ssh(master, opts, "cd ephemeral-hdfs/conf; sed -i \"/fs.s3n.awsAccessKeyId/{N; s/value>.*<\/value/value>" + s3_access_key + "<\/value/g }\" core-site.xml")
-  ssh(master, opts, "cd ephemeral-hdfs/conf; sed -i \"/fs.s3n.awsSecretAccessKey/{N; s/value>.*<\/value/value>" + s3_secret_key + "<\/value/g }\" core-site.xml")
+  ssh(master, opts, "cd ephemeral-hdfs/conf; sed -i \"/fs.s3n.awsAccessKeyId/{N; s/value>.*<\/value/value>" + s3_access_key.replace("/", "\/") + "<\/value/g }\" core-site.xml")
+  ssh(master, opts, "cd ephemeral-hdfs/conf; sed -i \"/fs.s3n.awsSecretAccessKey/{N; s/value>.*<\/value/value>" + s3_secret_key.replace("/", "\/") + "<\/value/g }\" core-site.xml")
 
 
 def get_s3_keys():
