@@ -90,7 +90,7 @@ def parse_args():
   parser.add_option("--copy", action="store_true", default=False,
       help="Copy AMP Camp data from S3 to ephemeral HDFS after launching the cluster (default: false)")
 
-  parser.add_option("--s3-stats-bucket", default="default"
+  parser.add_option("--s3-stats-bucket", default="default",
       help="S3 bucket to copy ampcamp data  from (default: ampcamp-data/wikistats_20090505-01)")
 
   parser.add_option("--s3-small-bucket", default="default",
@@ -445,17 +445,23 @@ def copy_ampcamp_data(master_nodes, opts):
     s3_buckets_range = range(1, 9)
     opts.s3_small_bucket = "ampcamp-data/wikistats_20090505_restricted-0" + str(random.choice(s3_buckets_range))
 
+  set_s3_keys_in_hdfs(master, opts, s3_access_key, s3_secret_key)
+
   ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop distcp " +
-                    "s3n://" + s3_access_key + ":" + s3_secret_key + "@" +
-                    opts.s3_stats_bucket + " " +
+                    "s3n://" + opts.s3_stats_bucket + " " +
                     "hdfs://`hostname`:9000/wiki/pagecounts")
 
   ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop fs -rmr /wikistats_20090505-07_restricted")
 
   ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop distcp " +
-                    "s3n://" + s3_access_key + ":" + s3_secret_key + "@" +
-                    opts.s3_small_bucket + " " +
+                    "s3n://" + opts.s3_small_bucket + " " +
                     "hdfs://`hostname`:9000/wikistats_20090505-07_restricted")
+
+def set_s3_keys_in_hdfs(master, opts, s3_access_key, s3_secret_key):
+  ssh(master, opts, "cd ephemeral-hdfs/conf; sed -i \"s/\!-- p/p/g\" core-site.xml")
+  ssh(master, opts, "cd ephemeral-hdfs/conf; sed -i \"s/y --/y/g\" core-site.xml")
+  ssh(master, opts, "cd ephemeral-hdfs/conf; sed -i \"/fs.s3n.awsAccessKeyId/{N; s/value>.*<\/value/value>" + s3_access_key + "<\/value/g }\" core-site.xml")
+  ssh(master, opts, "cd ephemeral-hdfs/conf; sed -i \"/fs.s3n.awsSecretAccessKey/{N; s/value>.*<\/value/value>" + s3_secret_key + "<\/value/g }\" core-site.xml")
 
 
 def get_s3_keys():
