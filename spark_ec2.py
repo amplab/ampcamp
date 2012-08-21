@@ -623,7 +623,7 @@ def main():
   err = 0
 
   # Select an AZ at random if it was not specified.
-  if opts.zone == "":
+  if opts.zone == "" or opts.zone == "none":
     opts.zone = random.choice(conn.get_all_zones()).name
 
   if action == "launch":
