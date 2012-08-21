@@ -152,15 +152,7 @@ def is_active(instance):
 def get_ami(ami_given): 
   # Figure out the latest AMI from our static URL
   if ami_given == "latest":
-    # TODO: Delete all these lines and uncomment the last line once our AMI is public
-    expires = int(time.time()) + 1500
-    canonicalized_resource = urllib2.quote("/ampcamp-amis/latest-ampcamp")
-    string_to_sign = "GET\n\n\n" + str(expires) + "\n" + canonicalized_resource
-    (s3_access_key, s3_secret_key) = get_s3_keys()
-    signature = base64.b64encode(hmac.new(s3_secret_key, string_to_sign, sha).digest())
-    url = LATEST_AMI_URL + "?AWSAccessKeyId=" + urllib2.quote(s3_access_key, ' ') +\
-          "&Expires=" + str(expires) + "&Signature=" + urllib2.quote(signature, ' ')
-    # url = LATEST_AMI_URL
+    url = LATEST_AMI_URL
   elif ami_given == "standalone":
     url = LATEST_STANDALONE_AMI_URL
   else:
