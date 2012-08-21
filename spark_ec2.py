@@ -624,6 +624,7 @@ def wait_for_mesos_cluster(master_nodes, opts):
   count = 0
   while err != 0 and count < 10:
     time.sleep(5)
+    err = check_mesos_cluster(master_nodes, opts)
     count = count + 1
   return err
 
