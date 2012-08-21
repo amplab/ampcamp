@@ -435,7 +435,7 @@ def copy_ampcamp_data(master_nodes, opts):
   # s3_access_key = s3_access_key.replace('/', '%2F')
   # s3_secret_key = s3_secret_key.replace('/', '%2F')
 
-  ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop fs -rmr /wiki")
+  # ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop fs -rmr /wiki")
 
   if (opts.s3_stats_bucket == "default"):
     s3_buckets_range = range(1, 9)
@@ -451,7 +451,7 @@ def copy_ampcamp_data(master_nodes, opts):
                     "s3n://" + opts.s3_stats_bucket + " " +
                     "hdfs://`hostname`:9000/wiki/pagecounts")
 
-  ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop fs -rmr /wikistats_20090505-07_restricted")
+  # ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop fs -rmr /wikistats_20090505-07_restricted")
 
   ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop distcp " +
                     "s3n://" + opts.s3_small_bucket + " " +
