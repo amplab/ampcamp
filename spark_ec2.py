@@ -90,11 +90,11 @@ def parse_args():
   parser.add_option("--copy", action="store_true", default=False,
       help="Copy AMP Camp data from S3 to ephemeral HDFS after launching the cluster (default: false)")
 
-  parser.add_option("--s3-stats-bucket", default="ak-ampcamp/wikistats_20090505-07",
-      help="S3 bucket to copy ampcamp data  from (default: ak-ampcamp/wikistats_20090505-07)")
+  parser.add_option("--s3-stats-bucket", default="default"
+      help="S3 bucket to copy ampcamp data  from (default: ampcamp-data/wikistats_20090505-01)")
 
-  parser.add_option("--s3-small-bucket", default="ak-ampcamp/wikistats_20090505-07_restricted",
-      help="S3 bucket to copy ampcamp restricted data from (default: ak-ampcamp/wikistats_20090505-07_restricted)")
+  parser.add_option("--s3-small-bucket", default="default",
+      help="S3 bucket to copy ampcamp restricted data from (default: ampcamp-data/wikistats_20090505_restricted-01)")
             
   (opts, args) = parser.parse_args()
   if len(args) != 2:
@@ -436,6 +436,14 @@ def copy_ampcamp_data(master_nodes, opts):
   # s3_secret_key = s3_secret_key.replace('/', '%2F')
 
   ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop fs -rmr /wiki")
+
+  if (opts.s3_stats_bucket == "default"):
+    s3_buckets_range = range(1, 9)
+    opts.s3_stats_bucket = "ampcamp-data/wikistats_20090505-0" + str(random.choice(s3_buckets_range))
+
+  if (opts.s3_small_bucket == "default"):
+    s3_buckets_range = range(1, 9)
+    opts.s3_small_bucket = "ampcamp-data/wikistats_20090505_restricted-0" + str(random.choice(s3_buckets_range))
 
   ssh(master, opts, "/root/ephemeral-hdfs/bin/hadoop distcp " +
                     "s3n://" + s3_access_key + ":" + s3_secret_key + "@" +
