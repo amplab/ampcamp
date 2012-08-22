@@ -84,19 +84,22 @@ def main():
     
     if opts.copy:
       args.append('--copy')
+
     args.append(opts.action)
+
     cluster_name = 'ampcamp' + str(cluster)
     args.append(cluster_name)
 
     print "Launching " + cluster_name
-    proc = subprocess.Popen(args, stdout=open("/tmp/" + cluster_name + ".out", "w"),
-                            stderr=open("/tmp/" + cluster_name + ".err", "w"), shell=True)
+    print  args
+    proc = subprocess.Popen(args, stdout=open("/tmp/" + cluster_name + "-" + opts.action + ".out", "w"),
+                            stderr=open("/tmp/" + cluster_name + "-" + opts.action + ".err", "w"))
     subprocesses.append(proc)
     cluster_names.append(cluster_name)
  
     # Wait for all the parallel launches to finish
     if (len(subprocesses) == opts.parallel):
-      ret = wait_and_check(subprocesses, cluster_names)
+      ret = wait_and_check(subprocesses, cluster_names, opts)
       subprocesses = []
       cluster_names = []
       if ret != 0:
@@ -104,17 +107,17 @@ def main():
         sys.exit(-1)
 
   if (len(subprocesses) != 0):
-    wait_and_check(subprocesses, cluster_names)
+    wait_and_check(subprocesses, cluster_names, opts)
 
-def wait_and_check(subprocesses, cluster_names):
+def wait_and_check(subprocesses, cluster_names, opts):
   num_success = 0
   num_mesos_failed = 0
   print "Waiting for parallel launches to finish...."
   # Print out details about clusters we launched 
   for p in range(0, len(subprocesses)): 
     subprocesses[p].wait()
-    p_stderr = open("/tmp/" + cluster_names[p] + ".err")
-    p_stdout = open("/tmp/" + cluster_names[p] + ".out")
+    p_stderr = open("/tmp/" + cluster_names[p] + "-" + opts.action + ".err")
+    p_stdout = open("/tmp/" + cluster_names[p] + "-" + opts.action + ".out")
     errs = p_stderr.readlines()
     for err in errs:
       if "SUCCESS:" in err:
