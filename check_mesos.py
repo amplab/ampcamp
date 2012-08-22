@@ -22,7 +22,7 @@ def main():
 
 def check_mesos_url(url):
   #url = "http://" + master + ":8080"
-  response = urllib2.urlopen(url)
+  response = urllib2.urlopen(url, timeout=30)
   if response.code != 200:
     print "Mesos master " + url + " returned " + str(response.code)
     return -1
